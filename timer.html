@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Timer</title>
+<style>
+*, *::before, *::after {
+  box-sizing: border-box; margin: 0; padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+html, body {
+  width: 100%; height: 100%;
+  background: #fff;
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  overflow-x: hidden;
+}
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 28px 12px 18px;
+}
+
+/* ===== タイマーブロック ===== */
+.timer-block {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ===== メインボタン ===== */
+.main-btn {
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 28px 8px;
+  line-height: 1;
+}
+.btn-yellow { background: #f5c400; color: #111; }
+.btn-red    { background: #dd1111; color: #fff; }
+
+/* カウントダウン数字 */
+.btn-countdown {
+  font-size: 48px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+/* ボタン名 */
+.btn-label {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+/* ===== サブボタン行 ===== */
+.sub-row {
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-top: 6px;
+}
+.sub-wrap {
+  width: 23%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.sub-spacer { flex: 1; }
+.sub-lbl {
+  font-size: 9px;
+  color: #888;
+  text-align: center;
+  white-space: nowrap;
+}
+.sub-btn {
+  width: 100%;
+  padding: 6px 0;
+  font-size: 16px;
+  font-weight: 600;
+  background: #f0f0f0;
+  border: 1px solid #ccc;
+  border-radius: 7px;
+  cursor: pointer;
+  color: #333;
+}
+
+/* ===== セパレータ ===== */
+.sep {
+  width: 88%;
+  border: none;
+  border-top: 2px solid #e4e4e4;
+  margin: 18px 0 14px;
+}
+
+/* ===== リセットブロック ===== */
+.reset-block {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 26px;
+  gap: 10px;
+}
+.reset-btn {
+  width: 100%;
+  /* スタートボタン縦の半分: padding28*2+font(48+20+gap6)≈130px → ~65px */
+  padding: 10px;
+  font-size: 19px;
+  font-weight: 700;
+  background: #1a5fcc;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.vol-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vol-row span { font-size: 11px; color: #666; white-space: nowrap; }
+.vol-row input[type=range] { flex: 1; }
+</style>
+</head>
+<body>
+
+<!-- ===== CIRCLE CALAMITY ===== -->
+<div class="timer-block">
+  <button class="main-btn btn-yellow" onclick="onStartA()">
+    <span class="btn-countdown" id="cdA">5</span>
+    <span class="btn-label">サークルカラミティ</span>
+  </button>
+  <div class="sub-row">
+    <div class="sub-wrap">
+      <span class="sub-lbl">戻したいとき</span>
+      <button class="sub-btn" onclick="adjustA(-1)">◀</button>
+    </div>
+    <div class="sub-spacer"></div>
+    <div class="sub-wrap">
+      <span class="sub-lbl">進めたいとき</span>
+      <button class="sub-btn" onclick="adjustA(+1)">▶</button>
+    </div>
+  </div>
+</div>
+
+<hr class="sep">
+
+<!-- ===== GROUND CALAMITY ===== -->
+<div class="timer-block">
+  <button class="main-btn btn-red" onclick="onStartB()">
+    <span class="btn-countdown" id="cdB">6</span>
+    <span class="btn-label">グランドカラミティ</span>
+  </button>
+  <div class="sub-row">
+    <div class="sub-wrap">
+      <span class="sub-lbl">戻したいとき</span>
+      <button class="sub-btn" onclick="adjustB(-1)">◀</button>
+    </div>
+    <div class="sub-spacer"></div>
+    <div class="sub-wrap">
+      <span class="sub-lbl">進めたいとき</span>
+      <button class="sub-btn" onclick="adjustB(+1)">▶</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== RESET + VOLUME ===== -->
+<div class="reset-block">
+  <button class="reset-btn" onclick="onReset()">リセット</button>
+  <div class="vol-row">
+    <span>音量</span>
+    <input type="range" id="volBar" min="0" max="1" step="0.05" value="0.5">
+  </div>
+</div>
+
+<script>
+/* ================================================
+   iOS Safari 対応:
+   - AudioContext: ユーザー操作時に resume()
+   - SpeechSynthesis: voices 遅延取得 + iOS 停止バグ対策
+   - タイマー: performance.now() ベースでドリフト防止
+================================================ */
+
+/* ===== AUDIO ===== */
+let _ac = null;
+function getAC() {
+  if (!_ac) {
+    _ac = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  // iOS Safari では suspended 状態のことがある
+  if (_ac.state === 'suspended') _ac.resume();
+  return _ac;
+}
+function vol() { return parseFloat(document.getElementById('volBar').value); }
+
+function tone(freq, dur, amp) {
+  try {
+    const c = getAC();
+    const o = c.createOscillator(), g = c.createGain();
+    o.connect(g); g.connect(c.destination);
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(amp, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur);
+    o.start(c.currentTime); o.stop(c.currentTime + dur + 0.02);
+  } catch(e) {}
+}
+function pip()       { tone(1300, 0.10, vol() * 0.35); }
+function piip()      { tone(1700, 0.65, vol() * 0.35); }
+function clickBeep() { tone(1450, 0.08, vol() * 0.28); }
+
+/* ===== SPEECH ===== */
+const VA_FIRST = "線と網の内側と最遠、速い";
+const VA = [
+  "線と網の内側と最遠うち、遅い",
+  "線そとと網、速い",
+  "線と網の内側と最遠、遅い",
+  "線そと広くと中央、速い",
+  "線そとと網、遅い",
+  "線と網の内側と最遠、速い"
+];
+const VB_FIRST = "にじ";
+const VB = [
+  "線と網と最遠",
+  "にじ",
+  "線そと広くと中央",
+  "にじ",
+  "線と網",
+  "にじ",
+  "線と線そとと網",
+  "にじ",
+  "網と最遠",
+  "にじ",
+  "線と線そとと中央",
+  "にじ"
+];
+
+// iOS: voices は非同期で読み込まれる
+let _voices = [];
+function loadVoices() {
+  _voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+}
+loadVoices();
+if (window.speechSynthesis) {
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+  // iOS Safari 追加対策: 少し遅らせて再取得
+  setTimeout(loadVoices, 500);
+  setTimeout(loadVoices, 1500);
+}
+
+function speak(text) {
+  if (!window.speechSynthesis) return;
+  // iOS Safari: 長時間後に speechSynthesis が paused になるバグ対策
+  try { window.speechSynthesis.cancel(); } catch(e) {}
+
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'ja-JP';
+  u.rate = 0.95;
+  u.pitch = 1.25;
+  u.volume = Math.min(1.0, vol() * 1.8);
+
+  // voices 再取得（iOS は遅延することがある）
+  if (_voices.length === 0) loadVoices();
+  const f = _voices.find(v => v.lang.startsWith('ja') && /female|kyoko|haruka|o-ren/i.test(v.name))
+           || _voices.find(v => v.lang.startsWith('ja'));
+  if (f) u.voice = f;
+
+  // iOS Safari: speechSynthesis.paused のとき resume が必要
+  if (window.speechSynthesis.paused) {
+    try { window.speechSynthesis.resume(); } catch(e) {}
+  }
+  window.speechSynthesis.speak(u);
+}
+
+/* ===== SEQUENCE DURATIONS ===== */
+function durA(idx) {
+  if (idx === 0) return 5;
+  return (idx % 2 === 1) ? 23.5 : 21;
+}
+function durB(idx) {
+  if (idx === 0) return 6;
+  return (idx % 2 === 1) ? 22.2 : 24.5;
+}
+
+/* ===== TIMER STATE ===== */
+function mkT() {
+  return {
+    running: false, tid: null,
+    startedAt: 0,    // performance.now() at step start
+    seqIdx: 0,
+    seqPos: 0,
+    voiceIdx: 0,
+    firstStart: true,
+    f3: false, f2: false, f1: false, f0: false, fv: false
+  };
+}
+const A = mkT(), B = mkT();
+
+function clearFlags(t) {
+  t.f3 = t.f2 = t.f1 = t.f0 = t.fv = false;
+}
+
+function remSec(t, durFn) {
+  return Math.ceil(Math.max(0, durFn(t.seqIdx) - t.seqPos));
+}
+function uiA() { document.getElementById('cdA').textContent = remSec(A, durA); }
+function uiB() { document.getElementById('cdB').textContent = remSec(B, durB); }
+
+/* ===== TICK (performance.now ベース・ドリフト防止) ===== */
+const TICK_MS = 100;
+
+function tickA() {
+  // performance.now ベースで実経過時間を計算
+  const now = performance.now();
+  A.seqPos = (now - A.startedAt) / 1000;
+
+  const d = durA(A.seqIdx);
+  const r = d - A.seqPos;
+
+  if (!A.f3 && r < 3.05 && r >= 2.05) { pip();  A.f3 = true; }
+  if (!A.f2 && r < 2.05 && r >= 1.05) { pip();  A.f2 = true; }
+  if (!A.f1 && r < 1.05 && r >= 0.05) { pip();  A.f1 = true; }
+  if (!A.f0 && r < 0.05)              { piip(); A.f0 = true; }
+
+  if (A.seqIdx > 0 && !A.fv && r < 7.05 && r >= 6.05) {
+    speak(VA[A.voiceIdx % VA.length]);
+    A.fv = true;
+  }
+
+  if (A.seqPos >= d) {
+    if (A.seqIdx > 0) A.voiceIdx++;
+    A.seqIdx++;
+    A.startedAt = performance.now();
+    A.seqPos = 0;
+    clearFlags(A);
+  }
+  uiA();
+}
+function tickB() {
+  const now = performance.now();
+  B.seqPos = (now - B.startedAt) / 1000;
+
+  const d = durB(B.seqIdx);
+  const r = d - B.seqPos;
+
+  if (!B.f3 && r < 3.05 && r >= 2.05) { pip();  B.f3 = true; }
+  if (!B.f2 && r < 2.05 && r >= 1.05) { pip();  B.f2 = true; }
+  if (!B.f1 && r < 1.05 && r >= 0.05) { pip();  B.f1 = true; }
+  if (!B.f0 && r < 0.05)              { piip(); B.f0 = true; }
+
+  if (B.seqIdx > 0 && !B.fv && r < 7.05 && r >= 6.05) {
+    speak(VB[B.voiceIdx % VB.length]);
+    B.fv = true;
+  }
+
+  if (B.seqPos >= d) {
+    if (B.seqIdx > 0) B.voiceIdx++;
+    B.seqIdx++;
+    B.startedAt = performance.now();
+    B.seqPos = 0;
+    clearFlags(B);
+  }
+  uiB();
+}
+
+/* ===== RUN / STOP / RESET ===== */
+function runA() {
+  stopA();
+  A.startedAt = performance.now() - A.seqPos * 1000;
+  A.running = true;
+  A.tid = setInterval(tickA, TICK_MS);
+}
+function stopA() {
+  if (A.tid) clearInterval(A.tid);
+  A.running = false; A.tid = null;
+}
+function resetA() {
+  stopA();
+  Object.assign(A, mkT());
+  uiA();
+}
+
+function runB() {
+  stopB();
+  B.startedAt = performance.now() - B.seqPos * 1000;
+  B.running = true;
+  B.tid = setInterval(tickB, TICK_MS);
+}
+function stopB() {
+  if (B.tid) clearInterval(B.tid);
+  B.running = false; B.tid = null;
+}
+function resetB() {
+  stopB();
+  Object.assign(B, mkT());
+  uiB();
+}
+
+/* ===== BUTTON HANDLERS ===== */
+function onStartA() {
+  // iOS AudioContext を確実に起動
+  getAC();
+  clickBeep();
+  if (A.running) return;
+  stopB();
+  if (A.firstStart) {
+    speak(VA_FIRST);
+    A.voiceIdx = 0;
+    A.firstStart = false;
+    A.fv = true;
+  }
+  runA();
+}
+
+
+function onStartB() {
+  getAC();
+  clickBeep();
+  if (B.running) return;
+  resetA();
+  if (B.firstStart) {
+    speak(VB_FIRST);
+    B.voiceIdx = 0;
+    B.firstStart = false;
+    B.fv = true;
+  }
+  runB();
+}
+
+function adjustA(dir) {
+  getAC();
+  clickBeep();
+  const maxPos = durA(A.seqIdx) - 0.15;
+  A.seqPos = Math.max(0, Math.min(maxPos, A.seqPos + dir));
+  if (A.running) A.startedAt = performance.now() - A.seqPos * 1000;
+  clearFlags(A);
+  uiA();
+}
+
+function adjustB(dir) {
+  getAC();
+  clickBeep();
+  const maxPos = durB(B.seqIdx) - 0.15;
+  B.seqPos = Math.max(0, Math.min(maxPos, B.seqPos + dir));
+  if (B.running) B.startedAt = performance.now() - B.seqPos * 1000;
+  clearFlags(B);
+  uiB();
+}
+
+function onReset() {
+  getAC();
+  clickBeep();
+  if (window.speechSynthesis) { try { window.speechSynthesis.cancel(); } catch(e) {} }
+  resetA();
+  resetB();
+}
+
+/* ===== iOS: 画面ロック/バックグラウンド対策 =====
+   visibilitychange で復帰時に startedAt を補正する */
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    // 復帰時: startedAt はそのままなので seqPos が正しく計算される
+    // AudioContext が止まっていたら再開
+    if (_ac && _ac.state === 'suspended') _ac.resume();
+    // speechSynthesis が止まっていたら再開
+    if (window.speechSynthesis && window.speechSynthesis.paused) {
+      try { window.speechSynthesis.resume(); } catch(e) {}
+    }
+  }
+});
+
+/* INIT */
+uiA(); uiB();
+</script>
+</body>
+</html>
